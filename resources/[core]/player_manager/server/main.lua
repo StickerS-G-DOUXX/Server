@@ -5,6 +5,9 @@
 
 local DB = exports['oxmysql']
 
+-- Cache: source → player data (populated in playerConnecting, served on demand)
+local playerCache = {}
+
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
 ---Return the first Steam identifier for a player, or nil.
@@ -35,9 +38,13 @@ end
 
 -- ── Player registration / loading ─────────────────────────────────────────────
 
----Ensure a player row exists in the database, then trigger client ready.
+-- Default spawn position (used for new players)
+local DEFAULT_POSITION = { x = -269.4, y = -955.3, z = 31.2, heading = 205.0 }
+
+---Ensure a player row exists in the database, store result in cache.
 ---@param source number
-local function loadPlayer(source)
+---@param cb function  called with player data table once loaded
+local function loadPlayer(source, cb)
     local identifier = getSteamId(source) or getLicenseId(source)
     if not identifier then
         print(('[player_manager] No identifier found for source %d — dropping.'):format(source))
@@ -47,39 +54,44 @@ local function loadPlayer(source)
 
     local name = GetPlayerName(source) or 'Unknown'
 
-    -- Check if the player already exists
     DB:single(
         'SELECT * FROM players WHERE identifier = ?',
         { identifier },
         function(row)
             if not row then
-                -- New player — insert
                 DB:execute(
                     'INSERT INTO players (identifier, name, position, metadata) VALUES (?, ?, ?, ?)',
                     {
                         identifier,
                         name,
-                        json.encode({ x = -269.4, y = -955.3, z = 31.2 }), -- default spawn
+                        json.encode(DEFAULT_POSITION),
                         json.encode({}),
                     },
                     function()
                         print(('[player_manager] Registered new player: %s (%s)'):format(name, identifier))
-                        TriggerClientEvent('player_manager:ready', source, { identifier = identifier, name = name, isNew = true })
+                        local data = { identifier = identifier, name = name, isNew = true,
+                                       position = DEFAULT_POSITION,
+                                       metadata = {}, money = 0, bank = 0 }
+                        playerCache[source] = data
+                        if cb then cb(data) end
                     end
                 )
             else
-                -- Existing player — update name and last_seen
                 DB:execute(
                     'UPDATE players SET name = ?, last_seen = NOW() WHERE identifier = ?',
                     { name, identifier },
                     function()
-                        TriggerClientEvent('player_manager:ready', source, {
+                        local data = {
                             identifier = identifier,
-                            name        = row.name,
-                            position    = json.decode(row.position or '{}'),
-                            metadata    = json.decode(row.metadata  or '{}'),
-                            isNew       = false,
-                        })
+                            name       = row.name,
+                            position   = json.decode(row.position or '{}'),
+                            metadata   = json.decode(row.metadata  or '{}'),
+                            money      = row.money or 0,
+                            bank       = row.bank  or 0,
+                            isNew      = false,
+                        }
+                        playerCache[source] = data
+                        if cb then cb(data) end
                     end
                 )
             end
@@ -107,19 +119,29 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
     deferrals.defer()
     deferrals.update(('Chargement du joueur %s…'):format(name))
 
-    -- Give oxmysql a tick to be ready
-    Citizen.SetTimeout(100, function()
+    -- Load (or register) the player from DB during the deferral window
+    loadPlayer(source, function(_data)
         deferrals.done()
     end)
 end)
 
-AddEventHandler('playerSpawned', function()
+-- Client fires this after spawning to receive its player data
+RegisterNetEvent('player_manager:requestData', function()
     local source = source
-    loadPlayer(source)
+    local data   = playerCache[source]
+    if data then
+        TriggerClientEvent('player_manager:ready', source, data)
+    else
+        -- Fallback: load now (e.g. if connecting without deferral support)
+        loadPlayer(source, function(d)
+            TriggerClientEvent('player_manager:ready', source, d)
+        end)
+    end
 end)
 
 AddEventHandler('playerDropped', function(reason)
     local source = source
+    playerCache[source] = nil
     print(('[player_manager] Player %d dropped: %s'):format(source, reason))
 end)
 

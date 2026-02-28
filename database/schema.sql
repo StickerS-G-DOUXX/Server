@@ -60,3 +60,15 @@ CREATE TABLE IF NOT EXISTS `inventory` (
     CONSTRAINT `fk_inv_player` FOREIGN KEY (`identifier`) REFERENCES `players` (`identifier`) ON DELETE CASCADE,
     CONSTRAINT `fk_inv_item`   FOREIGN KEY (`item_name`)  REFERENCES `items`   (`item_name`)  ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── player_needs ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `player_needs` (
+    `id`          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    `identifier`  VARCHAR(60)     NOT NULL,
+    `hunger`      TINYINT UNSIGNED NOT NULL DEFAULT 100 COMMENT '0-100',
+    `thirst`      TINYINT UNSIGNED NOT NULL DEFAULT 100 COMMENT '0-100',
+    `updated_at`  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_needs_identifier` (`identifier`),
+    CONSTRAINT `fk_needs_player` FOREIGN KEY (`identifier`) REFERENCES `players` (`identifier`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

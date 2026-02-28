@@ -11,7 +11,7 @@ RegisterCommand('openinventory', function()
         TriggerServerEvent('inventory:open')
     end
 end, false)
-RegisterKeyMapping('openinventory', 'Ouvrir l\'inventaire', 'keyboard', 'TAB')
+RegisterKeyMapping('openinventory', 'Ouvrir l\'inventaire', 'keyboard', 'F2')
 
 -- ── Receive inventory data from server ────────────────────────────────────────
 RegisterNetEvent('inventory:display', function(items)

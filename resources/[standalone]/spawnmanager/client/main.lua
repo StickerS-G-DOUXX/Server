@@ -3,20 +3,16 @@
 -- Spawns the player at the correct position received from player_manager
 -- ==============================================================================
 
-local spawnPoints = {
-    { x = -269.4, y = -955.3,  z = 31.2,  heading = 205.0 }, -- LSIA area
-    { x =  215.2, y = -810.5,  z = 29.7,  heading =  90.0 }, -- Pillbox Hill
-    { x = -1037.0, y = -2737.0, z = 20.2, heading =   0.0 }, -- Sandy Shores airfield
-}
+local DEFAULT_SPAWN = { x = -269.4, y = -955.3, z = 31.2, heading = 205.0 }
 
--- ── Spawn at a specific position ──────────────────────────────────────────────
+-- ── Step 1: after the game spawns us, ask the server for our player data ──────
+AddEventHandler('playerSpawned', function()
+    TriggerServerEvent('player_manager:requestData')
+end)
+
+-- ── Step 2: server responds with our data — teleport to saved position ────────
 AddEventHandler('player_manager:ready', function(data)
-    local pos = data.position or spawnPoints[1]
-
-    -- Wait until the game is loaded
-    while not IsScreenFadedIn() do
-        Citizen.Wait(500)
-    end
+    local pos = (data.position and data.position.x) and data.position or DEFAULT_SPAWN
 
     RequestCollisionAtCoord(pos.x, pos.y, pos.z)
     while not HasCollisionLoadedAroundEntity(PlayerPedId()) do
